@@ -95,8 +95,7 @@ pub fn pytimedelta_as_timedelta(py_timedelta: &PyDelta) -> PyResult<Duration> {
     let day: i64 = py_timedelta.getattr(intern!(py, "days"))?.extract()?;
     let second: i64 = py_timedelta.getattr(intern!(py, "seconds"))?.extract()?;
     let microsecond: i64 = py_timedelta.getattr(intern!(py, "microseconds"))?.extract()?;
-    let total_seconds = ((day * 86400 + second) * 1_000_000 + microsecond) as f64 / 1_000_000.0;
-    Ok(float_as_duration(total_seconds).unwrap())
+    Ok(int_as_duration(day * 86400 + second, microsecond).unwrap())
 }
 
 impl<'a> EitherTimedelta<'a> {
@@ -355,17 +354,33 @@ pub fn bytes_as_timedelta<'a, 'b>(input: &'a impl Input<'a>, bytes: &'b [u8]) ->
     }
 }
 
-pub fn float_as_duration(total_seconds: f64) -> Result<Duration, speedate::ParseError> {
-    let positive = total_seconds >= 0_f64;
-    let total_seconds = total_seconds.abs();
-    let microsecond = total_seconds.fract() * 1_000_000.0;
-    let days = total_seconds as u64 / 86400;
-    let seconds = total_seconds as u64 - days * 86400;
-    Duration::new(positive, days, seconds as u32, microsecond.round() as u32)
+pub fn int_as_duration(seconds: i64, microseconds: i64) -> Result<Duration, speedate::ParseError> {
+    if seconds != 0 && microseconds != 0 && seconds.signum() != microseconds.signum() {
+        return Err(speedate::ParseError::TooShort);
+    }
+    let positive = seconds >= 0_i64;
+    let seconds = seconds.unsigned_abs();
+
+    match Duration::new(
+        positive,
+        seconds / 86400,
+        (seconds % 86400) as u32,
+        microseconds.unsigned_abs() as u32,
+    ) {
+        Ok(duration) => Ok(duration),
+        Err(err) => Err(speedate::ParseError::TimeTooLarge),
+    }
 }
 
 pub fn float_as_timedelta<'a>(input: &'a impl Input<'a>, total_seconds: f64) -> ValResult<'a, EitherTimedelta<'a>> {
-    match float_as_duration(total_seconds) {
+    let microseconds = (total_seconds.fract().abs() * 1_000_000.0).round() as i64;
+    println!("total_seconds {}", total_seconds.floor() as i64);
+    println!("microseconds {}", total_seconds.signum() as i64 * microseconds);
+
+    match int_as_duration(
+        total_seconds.floor() as i64,
+        total_seconds.signum() as i64 * microseconds,
+    ) {
         Ok(duration) => Ok(duration.into()),
         Err(err) => Err(ValError::new(
             ErrorKind::TimeDeltaParsing {

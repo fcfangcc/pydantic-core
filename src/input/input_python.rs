@@ -393,6 +393,8 @@ impl<'a> Input<'a> for PyAny {
             bytes_as_timedelta(self, str.as_bytes())
         } else if let Ok(py_bytes) = self.cast_as::<PyBytes>() {
             bytes_as_timedelta(self, py_bytes.as_bytes())
+        } else if let Ok(int) = self.extract::<i64>() {
+            float_as_timedelta(self, int as f64)
         } else if let Ok(float) = self.extract::<f64>() {
             float_as_timedelta(self, float)
         } else {
