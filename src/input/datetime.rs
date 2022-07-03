@@ -92,18 +92,18 @@ impl<'a> EitherTimedelta<'a> {
     pub fn as_raw(&self) -> PyResult<Duration> {
         match self {
             Self::Raw(timedelta) => Ok(timedelta.clone()),
-            Self::Py(py_timedelta) => Ok(Duration::new(
-                true,
-                py_timedelta
-                    .getattr(pyo3::intern!(py_timedelta.py(), "days"))?
-                    .extract()?,
-                py_timedelta
-                    .getattr(pyo3::intern!(py_timedelta.py(), "seconds"))?
-                    .extract()?,
-                py_timedelta
-                    .getattr(pyo3::intern!(py_timedelta.py(), "microseconds"))?
-                    .extract()?,
-            )),
+            Self::Py(py_timedelta) => {
+                let py = py_timedelta.py();
+                let day: i64 = py_timedelta.getattr(intern!(py, "days"))?.extract()?;
+                let second: i32 = py_timedelta.getattr(intern!(py, "seconds"))?.extract()?;
+                let microsecond: i32 = py_timedelta.getattr(intern!(py, "microseconds"))?.extract()?;
+                Ok(Duration::new(
+                    !(day < 0 || second < 0 || microsecond < 0),
+                    day.unsigned_abs(),
+                    second.unsigned_abs(),
+                    microsecond.unsigned_abs(),
+                ))
+            }
         }
     }
 

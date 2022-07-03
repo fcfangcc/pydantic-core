@@ -13,6 +13,10 @@ from ..conftest import Err
     'input_value,expected',
     [
         (
+            timedelta(days=-3, hours=2, seconds=1, milliseconds=500),
+            timedelta(days=-3, hours=2, seconds=1, milliseconds=500),
+        ),
+        (
             timedelta(days=3, weeks=2, hours=1, minutes=2, seconds=3, milliseconds=500),
             timedelta(days=3, weeks=2, hours=1, minutes=2, seconds=3, milliseconds=500),
         ),
@@ -118,7 +122,16 @@ def test_timedelta_strict_json(input_value, expected):
         ({'ge': timedelta(days=3)}, 'P2DT1H', Err('Value must be greater than or equal to P3D')),
         ({'gt': timedelta(days=3)}, 'P3DT1H', timedelta(days=3, hours=1)),
         ({'gt': 'P3D'}, 'P2DT1H', Err('Value must be greater than P3D')),
+        (
+            {'le': timedelta(days=-3, milliseconds=-123)},
+            timedelta(days=-3, milliseconds=-123),
+            timedelta(days=-3, milliseconds=-123),
+        ),
+        ({'le': timedelta(days=-3, milliseconds=-123)}, '-P3DT0.123S', timedelta(days=-3)),
+        ({'gt': timedelta(days=-3, milliseconds=-123)}, timedelta(days=-2), timedelta(days=-2)),
+        ({'gt': timedelta(days=-3, milliseconds=-123)}, '-P2DT0.123S', timedelta(days=-2, milliseconds=123 - 1)),
     ],
+    ids=repr,
 )
 def test_timedelta_kwargs(kwargs, input_value, expected):
     v = SchemaValidator({'type': 'timedelta', **kwargs})
