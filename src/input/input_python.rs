@@ -382,7 +382,7 @@ impl<'a> Input<'a> for PyAny {
         if let Ok(dt) = self.cast_as::<PyDelta>() {
             Ok(dt.into())
         } else {
-            Err(ValError::new(ErrorKind::TimedeltaType, self))
+            Err(ValError::new(ErrorKind::TimeDeltaType, self))
         }
     }
 
@@ -394,9 +394,9 @@ impl<'a> Input<'a> for PyAny {
         } else if let Ok(py_bytes) = self.cast_as::<PyBytes>() {
             bytes_as_timedelta(self, py_bytes.as_bytes())
         } else if let Ok(float) = self.extract::<f64>() {
-            float_as_timedelta(float)
+            float_as_timedelta(self, float)
         } else {
-            Err(ValError::new(ErrorKind::TimedeltaType, self))
+            Err(ValError::new(ErrorKind::TimeDeltaType, self))
         }
     }
 }

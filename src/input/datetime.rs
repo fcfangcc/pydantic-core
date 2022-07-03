@@ -87,23 +87,23 @@ impl<'a> From<&'a PyDelta> for EitherTimedelta<'a> {
         Self::Py(timedelta)
     }
 }
+pub fn pytimedelta_as_timedelta(py_timedelta: &PyDelta) -> PyResult<Duration> {
+    // timedelta(seconds=-86400 - 0.123)
+    // in python datetime.timedelta(days=-2, seconds=86399, microseconds=877000)
+    // in speedate duration Duration::new(false, 1, 0, 123000) "-P1DT0.123S"
+    let py = py_timedelta.py();
+    let day: i64 = py_timedelta.getattr(intern!(py, "days"))?.extract()?;
+    let second: i64 = py_timedelta.getattr(intern!(py, "seconds"))?.extract()?;
+    let microsecond: i64 = py_timedelta.getattr(intern!(py, "microseconds"))?.extract()?;
+    let total_seconds = ((day * 86400 + second) * 1_000_000 + microsecond) as f64 / 1_000_000.0;
+    Ok(float_as_duration(total_seconds).unwrap())
+}
 
 impl<'a> EitherTimedelta<'a> {
     pub fn as_raw(&self) -> PyResult<Duration> {
         match self {
             Self::Raw(timedelta) => Ok(timedelta.clone()),
-            Self::Py(py_timedelta) => {
-                let py = py_timedelta.py();
-                let day: i64 = py_timedelta.getattr(intern!(py, "days"))?.extract()?;
-                let second: i32 = py_timedelta.getattr(intern!(py, "seconds"))?.extract()?;
-                let microsecond: i32 = py_timedelta.getattr(intern!(py, "microseconds"))?.extract()?;
-                Ok(Duration::new(
-                    !(day < 0 || second < 0 || microsecond < 0),
-                    day.unsigned_abs(),
-                    second.unsigned_abs(),
-                    microsecond.unsigned_abs(),
-                ))
-            }
+            Self::Py(py_timedelta) => pytimedelta_as_timedelta(py_timedelta),
         }
     }
 
@@ -347,14 +347,15 @@ pub fn bytes_as_timedelta<'a, 'b>(input: &'a impl Input<'a>, bytes: &'b [u8]) ->
     match Duration::parse_bytes(bytes) {
         Ok(dt) => Ok(dt.into()),
         Err(err) => Err(ValError::new(
-            ErrorKind::TimedeltaParsing {
+            ErrorKind::TimeDeltaParsing {
                 error: err.get_documentation().unwrap_or_default(),
             },
             input,
         )),
     }
 }
-pub fn float_as_duration(total_seconds: f64) -> Duration {
+
+pub fn float_as_duration(total_seconds: f64) -> Result<Duration, speedate::ParseError> {
     let positive = total_seconds >= 0_f64;
     let total_seconds = total_seconds.abs();
     let microsecond = total_seconds.fract() * 1_000_000.0;
@@ -363,9 +364,18 @@ pub fn float_as_duration(total_seconds: f64) -> Duration {
     Duration::new(positive, days, seconds as u32, microsecond.round() as u32)
 }
 
-pub fn float_as_timedelta<'a>(total_seconds: f64) -> ValResult<'a, EitherTimedelta<'a>> {
-    Ok(float_as_duration(total_seconds).into())
+pub fn float_as_timedelta<'a>(input: &'a impl Input<'a>, total_seconds: f64) -> ValResult<'a, EitherTimedelta<'a>> {
+    match float_as_duration(total_seconds) {
+        Ok(duration) => Ok(duration.into()),
+        Err(err) => Err(ValError::new(
+            ErrorKind::TimeDeltaParsing {
+                error: err.get_documentation().unwrap_or_default(),
+            },
+            input,
+        )),
+    }
 }
+
 #[pyclass(module = "pydantic_core._pydantic_core", extends = PyTzInfo)]
 #[derive(Debug, Clone)]
 struct TzInfo {
